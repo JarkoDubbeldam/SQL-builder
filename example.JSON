@@ -1,0 +1,37 @@
+{
+  "graph": {
+    "table1": {
+      "tag": ["table1"],
+      "DBHandle": ["tables.table1"],
+      "Priority": [1],
+      "Columns": ["a", "b", "c"],
+      "Joins": {
+        "table2": ["on table2.a = table1.a", "inner"],
+        "table3": ["on table1.c = table3.c", "inner"]
+
+      }
+    },
+    "table2": {
+      "tag": ["table2"],
+      "DBHandle": ["tables.table2"],
+      "Priority": [2],
+      "Columns": ["a", "d", "e"],
+      "Joins": {
+        "table3": ["on table2.d=table3.d and table2.e = table3.e", "inner"]
+      }
+    },
+    "table3": {
+      "tag": ["table3"],
+      "DBHandle": ["tables.table3"],
+      "Priority": [4],
+      "Columns": ["c", "d", "e"],
+      "Joins": []
+    }
+  },
+  "presets": {
+    "non empty b": {
+      "table": ["table1"],
+      "where": ["table1.b is not null"]
+    }
+  }
+}
