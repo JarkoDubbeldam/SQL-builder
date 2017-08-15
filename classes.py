@@ -269,7 +269,7 @@ def main():
     """
     Creates an example query
     """
-    file = 'R:/NL/Database marketing/R library/SQL builder/poging 4/universes/Zorg2017.uni'
+    file = 'example.JSON'
     query = Query(file)
     query.addTables('table1')
     query.addTables('table2')
