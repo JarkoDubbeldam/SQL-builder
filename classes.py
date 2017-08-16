@@ -105,7 +105,6 @@ class Query(Universe):
     how_to_join is a dictionary that allows setting joins (left, right, inner, full)
     other than the defaults imported from the JSON.
     """
-    core = 'select\n\n{columns}\n\nfrom {joins}\n\nwhere {where}'
 
     def __init__(self, filename):
         super().__init__(filename)
@@ -114,39 +113,47 @@ class Query(Universe):
         self.active_presets = []
         self.implicit_tables = []
         self.how_to_join = {}
-        self.where = []
+        self.where = {}
         self.tables_added_by_preset = []
 
-    def add_tables(self, tablename, add_or_remove=True):
+    def add_tables(self, tablename):
         """
-        Toggles active setting of given tablename. GUI ensures that only valid names
-        will be given.
-        """
-        if add_or_remove:
-            if tablename not in self.active_tables:
-                self.active_tables.append(tablename)
-                self.active_columns[tablename] = []
-        else:
-            self.active_tables.remove(tablename)
-
-    def add_columns(self, table, column, add_or_remove=True):
-        """
-        Toggles active setting for given columnname from table. GUI ensures that
+        Toggles active setting of given tablename to active. GUI ensures that
         only valid names will be given.
         """
-        if add_or_remove:
-            if column not in self.active_columns[table]:
-                self.active_columns[table].append(column)
-        else:
-            self.active_columns[table].remove(column)
+        if tablename not in self.active_tables:
+            self.active_tables.append(tablename)
+            self.active_columns[tablename] = []
 
-    def add_where(self, string):
+    def remove_tables(self, tablename):
+        """
+        Toggles active setting of given tablename to inactive. GUI ensures that
+        only valid names will be given.
+        """
+        self.active_tables.remove(tablename)
+
+    def add_columns(self, table, column):
+        """
+        Sets given columnname from table to active. GUI ensures that
+        only valid names will be given.
+        """
+        if column not in self.active_columns[table]:
+            self.active_columns[table].append(column)
+
+    def remove_columns(self, table, column):
+        """
+        Sets given columnname from table to inactive. GUI ensures that
+        only valid names will be given.
+        """
+        self.active_columns[table].remove(column)
+
+    def add_where(self, string, table, column):
         """
         Adds any string to a list to be input as where statement. This could be
         vulnerable for SQL injection, but the scope of this project is in-house
         usage, and the generated SQL query isn't directly passed to the server.
         """
-        self.where.append(string)
+        self.where[(table, column)] = string
 
     def add_preset(self, preset):
         """
@@ -156,10 +163,11 @@ class Query(Universe):
         """
         relevant_preset = self.presets[preset]
         table_to_add = relevant_preset['table'][0]
+        column_to_add = relevant_preset['column'][0]
         if table_to_add not in self.active_tables:
-            self.add_tables(table_to_add, True)
+            self.add_tables(table_to_add)
             self.tables_added_by_preset.append(table_to_add)
-        self.add_where(relevant_preset['where'][0])
+        self.add_where(relevant_preset['where'][0], table_to_add, column_to_add)
         self.active_presets.append(preset)
 
 
@@ -238,7 +246,8 @@ class Query(Universe):
             joins = self.find_joins()
             base_table = joins[0][0]
             join_statement = [self.generate_join_statement(i) for i in joins]
-        join_statement = ([self.tables[base_table]['DBHandle'][0]
+        join_statement = (['from '
+                           + self.tables[base_table]['DBHandle'][0]
                            + ' '
                            + self.tables[base_table]['tag'][0]]
                           + join_statement)
@@ -251,17 +260,18 @@ class Query(Universe):
 
 
 
-        completed_column_statement = ',\n'.join(column_statement)
+        completed_column_statement = 'select\n\n' + ',\n'.join(column_statement)
 
 
         if self.where:
-            where_statement = '\nand '.join(self.where)
+            where_statement = '\nand '.join(self.where.values())
         else:
             where_statement = '1 = 1'
+        completed_where_statement = 'where ' + where_statement
 
-        query = Query.core.replace('{columns}', completed_column_statement)
-        query = query.replace('{joins}', completed_join_statement)
-        query = query.replace('{where}', where_statement)
+        query = '\n\n'.join([completed_column_statement,
+                             completed_join_statement,
+                             completed_where_statement])
 
         return query
 
