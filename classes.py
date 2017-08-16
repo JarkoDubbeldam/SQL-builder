@@ -20,10 +20,9 @@ class Universe:
         the universe/graph, including relational information.
         """
         with open(filename, encoding='utf-8') as file:
-            self.json = loads(str(file.read()))
-        self.presets = self.json['presets']
-        self.json = self.json['graph']
-        self.tables = self.json.keys()
+            json = loads(str(file.read()))
+        self.presets = json['presets']
+        self.tables = json['graph']
         self.connections = self.get_edges()
 
     def get_edges(self):
@@ -37,7 +36,7 @@ class Universe:
             edges[table] = []
             try:
                 edges[table] += [connected_tables
-                                 for connected_tables in self.json[table]['Joins']]
+                                 for connected_tables in self.tables[table]['Joins']]
             except AttributeError:
                 pass
         for node in edges:
@@ -77,7 +76,7 @@ class Universe:
         additional node and one of the existing nodes returned by shortest_path,
         selecting the one that takes the fewest steps.
         """
-        sorted_nodes = sorted([[self.json[node]['Priority'][0], node] for node in nodes])
+        sorted_nodes = sorted([[self.tables[node]['Priority'][0], node] for node in nodes])
         paths = []
 
         paths.append(self.shortest_path(sorted_nodes[0][1], sorted_nodes[1][1]))
@@ -96,7 +95,7 @@ class Universe:
         return paths
 
 
-class Query:
+class Query(Universe):
     """
     Query contains the functions that allow us to build an SQL query based on
     a universe object. It maintains lists with the names of activated tables
@@ -106,36 +105,40 @@ class Query:
     how_to_join is a dictionary that allows setting joins (left, right, inner, full)
     other than the defaults imported from the JSON.
     """
-    core = 'select\n\n{columns}\n\nfrom {joins}\n\n where {where}'
+    core = 'select\n\n{columns}\n\nfrom {joins}\n\nwhere {where}'
 
-    def __init__(self, universum):
-
-        self.graph = universum
+    def __init__(self, filename):
+        super().__init__(filename)
         self.active_tables = []
         self.active_columns = {}
+        self.active_presets = []
         self.implicit_tables = []
-        self.join_strings = {}
-        for i in self.graph.tables:
-            self.join_strings[i] = self.graph.json[i]['Joins']
         self.how_to_join = {}
         self.where = []
+        self.tables_added_by_preset = []
 
-    def add_tables(self, tablename):
+    def add_tables(self, tablename, add_or_remove=True):
         """
-        Sets given tablename to active. GUI ensures that only valid names
+        Toggles active setting of given tablename. GUI ensures that only valid names
         will be given.
         """
-        if tablename not in self.active_tables:
-            self.active_tables.append(tablename)
-            self.active_columns[tablename] = []
+        if add_or_remove:
+            if tablename not in self.active_tables:
+                self.active_tables.append(tablename)
+                self.active_columns[tablename] = []
+        else:
+            self.active_tables.remove(tablename)
 
-    def add_columns(self, table, column):
+    def add_columns(self, table, column, add_or_remove=True):
         """
-        Sets given columnname from table to active. GUI ensures that only valid names
-        will be given.
+        Toggles active setting for given columnname from table. GUI ensures that
+        only valid names will be given.
         """
-        if column not in self.active_columns[table]:
-            self.active_columns[table].append(column)
+        if add_or_remove:
+            if column not in self.active_columns[table]:
+                self.active_columns[table].append(column)
+        else:
+            self.active_columns[table].remove(column)
 
     def add_where(self, string):
         """
@@ -145,6 +148,20 @@ class Query:
         """
         self.where.append(string)
 
+    def add_preset(self, preset):
+        """
+        Presets are predefined where-statements. They add the relevant table to
+        the list of activated tables and add a where statement. For simplicity,
+        when added, a preset can't be disabled.
+        """
+        relevant_preset = self.presets[preset]
+        table_to_add = relevant_preset['table'][0]
+        if table_to_add not in self.active_tables:
+            self.add_tables(table_to_add, True)
+            self.tables_added_by_preset.append(table_to_add)
+        self.add_where(relevant_preset['where'][0])
+        self.active_presets.append(preset)
+
 
     def find_joins(self):
         """
@@ -152,9 +169,9 @@ class Query:
         are needed and which tables need to be implicitly added. Returns a list
         of tuples with tablenames to be joined.
         """
-        tags = [self.graph.json[table]['tag'][0]
+        tags = [self.tables[table]['tag'][0]
                 for table in self.active_tables]
-        join_paths = self.graph.join_paths(tags)
+        join_paths = self.join_paths(tags)
         join_sets = [(table1, table2)
                      for join_edge in join_paths
                      for table1, table2 in zip(join_edge[:-1], join_edge[1:])]
@@ -176,10 +193,10 @@ class Query:
         """
         added_table = table_tuple[1]
         try:
-            on_string, how = self.graph.json[table_tuple[0]]['Joins'][table_tuple[1]]
+            on_string, how = self.tables[table_tuple[0]]['Joins'][table_tuple[1]]
         except TypeError:
             table_tuple = (table_tuple[1], table_tuple[0])
-            on_string, how = self.graph.json[table_tuple[0]]['Joins'][table_tuple[1]]
+            on_string, how = self.tables[table_tuple[0]]['Joins'][table_tuple[1]]
 
 
         if table_tuple not in self.how_to_join:
@@ -187,9 +204,9 @@ class Query:
 
         join_string = (self.how_to_join[table_tuple]
                        + ' join '
-                       + self.graph.json[added_table]['DBHandle'][0]
+                       + self.tables[added_table]['DBHandle'][0]
                        + ' '
-                       +  self.graph.json[added_table]['tag'][0]
+                       +  self.tables[added_table]['tag'][0]
                        + '\n')
         return join_string + on_string
 
@@ -200,7 +217,7 @@ class Query:
         """
         if not self.active_columns[table]:
             self.active_columns[table] = ['*']
-        return ',\n'.join([(self.graph.json[table]['tag'][0]
+        return ',\n'.join([(self.tables[table]['tag'][0]
                             + '.'
                             + i)
                            for i in self.active_columns[table]])
@@ -221,9 +238,9 @@ class Query:
             joins = self.find_joins()
             base_table = joins[0][0]
             join_statement = [self.generate_join_statement(i) for i in joins]
-        join_statement = ([self.graph.json[base_table]['DBHandle'][0]
+        join_statement = ([self.tables[base_table]['DBHandle'][0]
                            + ' '
-                           + self.graph.json[base_table]['tag'][0]]
+                           + self.tables[base_table]['tag'][0]]
                           + join_statement)
         completed_join_statement = '\n\n'.join(join_statement)
 
@@ -248,11 +265,16 @@ class Query:
 
         return query
 
-
-if __name__ == "__main__":
-    graph = Universe('example.JSON')
-    query = Query(graph)
+def main():
+    """
+    Creates an example query
+    """
+    file = 'example.JSON'
+    query = Query(file)
     query.addTables('table1')
     query.addTables('table2')
     query.addTables('table3')
     print(query.compileQuery())
+
+if __name__ == "__main__":
+    main()

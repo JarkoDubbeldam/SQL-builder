@@ -9,7 +9,7 @@ import sys
 from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QFileDialog,
                              QRadioButton, QPushButton, QCheckBox, QDialog, QTextEdit,
                              QButtonGroup, QLineEdit, QApplication)
-from classes import Universe, Query
+from classes import Query
 
 
 #Global constants defining the amount of vertical space between those specific items.
@@ -67,15 +67,6 @@ class CreateQueryInterface(QMainWindow):
         self.center()
         self.raise_()
         self.activateWindow()
-
-        self.available_tables = []
-        self.activated_tables = []
-        self.activated_columns = {}
-        self.join_settings = {}
-        self.where = []
-        self.activated_presets = {}
-        self.added_by_preset = {}
-
         self.show()
 
     def center(self):
@@ -97,21 +88,15 @@ class CreateQueryInterface(QMainWindow):
         When a JSON is selected, instances of the imported classes are created
         to serve as a reference. Relevant buttons are activated.
         """
-        self.universe_file = QFileDialog.getOpenFileName(
+        universe_file = QFileDialog.getOpenFileName(
             None,
             'Select universe',
             'R:/NL/Database Marketing/R library/SQL builder/Poging 4/Universes',
             'Universes (*.uni)')[0]
-        self.universe = Universe(self.universe_file)
-        self.query = Query(self.universe)
-        self.available_tables = self.query.graph.tables
+        self.query = Query(universe_file)
         self.table_button.setEnabled(True)
         self.preset_button.setEnabled(True)
         self.universe_button.setEnabled(False)
-
-        for preset in self.universe.presets:
-            self.activated_presets[preset] = False
-
 
     def pick_tables(self):
         """
@@ -122,14 +107,14 @@ class CreateQueryInterface(QMainWindow):
         """
         dialog2 = QDialog()
         buttons = []
-        for index, table in zip(range(len(self.available_tables)), self.available_tables):
+        for index, table in zip(range(len(self.query.tables)), self.query.tables):
             buttons.append(QCheckBox(dialog2))
             buttons[index].setText(table)
             buttons[index].move(10, 10 + index * CHECKBOXHEIGHT)
             buttons[index].clicked[bool].connect(self.activate_table)
-            buttons[index].setChecked(table in self.activated_tables)
+            buttons[index].setChecked(table in self.query.active_tables)
             try:
-                buttons[index].setEnabled(not self.added_by_preset[table])
+                buttons[index].setEnabled(table not in self.query.tables_added_by_preset)
             except KeyError:
                 pass
 
@@ -143,20 +128,10 @@ class CreateQueryInterface(QMainWindow):
         relevant buttons in the main window.
         """
         source = self.sender()
-        if pressed:
-            self.activated_tables.append(source.text())
-            self.activated_columns[source.text()] = []
-            self.added_by_preset[source.text()] = False
-        else:
-            new_tables = [table
-                          for table in self.activated_tables
-                          if not table == source.text()]
-            self.activated_tables = new_tables
-            self.activated_columns[source.text()] = None
-
+        self.query.add_tables(source.text(), pressed)
         self.column_button.setEnabled(True)
         self.compile_button.setEnabled(True)
-        if len(self.activated_tables) > 1:
+        if len(self.query.active_tables) > 1:
             self.join_button.setEnabled(True)
 
 
@@ -169,7 +144,7 @@ class CreateQueryInterface(QMainWindow):
         dialog3 = QDialog()
 
         buttons = []
-        tables = self.activated_tables
+        tables = self.query.active_tables
         for index, table in zip(range(len(tables)), tables):
             buttons.append(QPushButton(table, dialog3))
             buttons[index].move(10, 10 + index * PUSHBUTTONHEIGHT)
@@ -188,14 +163,14 @@ class CreateQueryInterface(QMainWindow):
         dialog = QDialog()
 
         buttons = []
-        columns = self.query.graph.json[self.selected_table]['Columns']
+        columns = self.query.tables[self.selected_table]['Columns']
         for index, column in zip(range(len(columns)),
                                  sorted(columns)):
             buttons.append(QCheckBox(dialog))
             buttons[index].setText(column)
             buttons[index].move(10 + 200 * (index//15), 10 + index%15 * CHECKBOXHEIGHT)
             buttons[index].clicked[bool].connect(self.activate_columns)
-            buttons[index].setChecked(column in self.activated_columns[self.selected_table])
+            buttons[index].setChecked(column in self.query.active_columns[self.selected_table])
 
         dialog.setWindowTitle('Pick columns')
         dialog.exec_()
@@ -206,27 +181,15 @@ class CreateQueryInterface(QMainWindow):
         from the dictionary of activated columns. Enables another button.
         """
         source = self.sender()
-        if pressed:
-            self.activated_columns[self.selected_table].append(source.text())
-        else:
-            new_columns = [column
-                           for column in self.activated_columns[self.selected_table]
-                           if not column == source.text()]
-            self.activated_columns[self.selected_table] = new_columns
-
+        self.query.add_columns(self.selected_table, source.text(), pressed)
         self.where_button.setEnabled(True)
 
     def specify_joins(self):
         """
         Dialog to set the way tables are joined. First the required joins are
-        computed by creating a Query instance, adding the activated tables to
-        it and calling the find_joins method. Each of the joins gets a button
+        computed by calling the find_joins method. Each of the joins gets a button
         which creates another dialog.
         """
-        self.query = Query(self.universe)
-        for table in self.activated_tables:
-            self.query.add_tables(table)
-
         joins = self.query.find_joins()
 
         dialog = QDialog()
@@ -250,14 +213,14 @@ class CreateQueryInterface(QMainWindow):
 
         table_tuple = source.joinTag
         try:
-            how = self.query.graph.json[table_tuple[0]]['Joins'][table_tuple[1]][1]
+            how = self.query.tables[table_tuple[0]]['Joins'][table_tuple[1]][1]
         except TypeError:
             table_tuple = (table_tuple[1], table_tuple[0])
-            how = self.query.graph.json[table_tuple[0]]['Joins'][table_tuple[1]][1]
+            how = self.query.tables[table_tuple[0]]['Joins'][table_tuple[1]][1]
 
         self.selected_join = table_tuple
         try:
-            how = self.join_settings[table_tuple]
+            how = self.query.how_to_join[table_tuple]
         except KeyError:
             pass
 
@@ -279,7 +242,7 @@ class CreateQueryInterface(QMainWindow):
         Sets the join setting to the selected radiobutton.
         """
         source = self.sender()
-        self.join_settings[self.selected_join] = source.text()
+        self.query.how_to_join[self.selected_join] = source.text()
 
     def specify_where(self):
         """
@@ -290,8 +253,8 @@ class CreateQueryInterface(QMainWindow):
         dialog3 = QDialog()
 
         buttons = []
-        for index, table in zip(range(len(self.activated_tables)),
-                                self.activated_tables):
+        for index, table in zip(range(len(self.query.active_tables)),
+                                self.query.active_tables):
             buttons.append(QPushButton(table, dialog3))
             buttons[index].move(10, 10 + index * PUSHBUTTONHEIGHT)
             buttons[index].clicked.connect(self.pick_column_for_where)
@@ -308,7 +271,7 @@ class CreateQueryInterface(QMainWindow):
         self.dialog2 = QDialog()
 
         buttons = []
-        columns = self.activated_columns[self.selected_table]
+        columns = self.query.active_columns[self.selected_table]
         for index, column in zip(range(len(columns)),
                                  sorted(columns)):
             buttons.append(QPushButton(self.dialog2))
@@ -345,7 +308,7 @@ class CreateQueryInterface(QMainWindow):
         """
         Handles the submit button, stores the where-string and closes the dialogs.
         """
-        self.where.append(self.where_editor.text())
+        self.query.add_where(self.where_editor.text())
         self.dialog.close()
         self.dialog2.close()
 
@@ -355,7 +318,7 @@ class CreateQueryInterface(QMainWindow):
         They add the relevant table to the list of activated tables and add
         a where statement. For simplicity, when added, a preset can't be disabled.
         """
-        presets = self.universe.presets.keys()
+        presets = self.query.presets.keys()
 
         dialog = QDialog()
 
@@ -363,30 +326,22 @@ class CreateQueryInterface(QMainWindow):
         for index, preset in zip(range(len(presets)), presets):
             buttons.append(QCheckBox(dialog))
             buttons[index].setText(preset)
-            buttons[index].setEnabled(not self.activated_presets[preset])
-            buttons[index].setChecked(self.activated_presets[preset])
+            buttons[index].setEnabled(preset not in self.query.active_presets)
+            buttons[index].setChecked(preset in self.query.active_presets)
             buttons[index].clicked[bool].connect(self.activate_preset)
             buttons[index].move(10, 10 + index * CHECKBOXHEIGHT)
 
         dialog.setWindowTitle('Select presets')
         dialog.exec_()
 
-    def activate_preset(self, pressed):
+    def activate_preset(self):
         """
         Activates preset. Enables buttons similar to activating a table, as this
         also activates presets. Keeps track of tables added by presets.
         """
         source = self.sender()
         source.setEnabled(False)
-        self.activated_presets[source.text()] = pressed
-        relevant_preset = self.universe.presets[source.text()]
-        required_table = relevant_preset['table'][0]
-
-        if required_table not in self.activated_tables:
-            self.activated_tables.append(required_table)
-            self.activated_columns[required_table] = []
-        self.added_by_preset[required_table] = True
-        self.where.append(relevant_preset['where'][0])
+        self.query.add_preset(source.text())
         self.column_button.setEnabled(True)
         self.compile_button.setEnabled(True)
         if len(self.activated_tables) > 1:
@@ -397,22 +352,13 @@ class CreateQueryInterface(QMainWindow):
         Compiles the query. The activated elements are added to the query and
         the compile_query method is called. The result is printed in the Textdisplay.
         """
-        query = Query(self.universe)
-
-        for table in self.activated_tables:
-            query.add_tables(table)
-
-        for table in self.activated_columns:
-            for column in self.activated_columns[table]:
-                query.add_columns(table, column)
-
-        query.how_to_join = self.join_settings
-        if self.where:
-            query.where = self.where
-        outputquery = query.compile_query()
+        outputquery = self.query.compile_query()
         self.output.setText(outputquery)
 
 def main():
+    """
+    Deploys the app
+    """
     app = QApplication([])
     interface = CreateQueryInterface()
     sys.exit(app.exec_())
