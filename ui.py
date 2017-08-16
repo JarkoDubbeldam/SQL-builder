@@ -30,7 +30,7 @@ class CreateQueryInterface(QMainWindow, Query):
         super().__init__(filename=QFileDialog.getOpenFileName(
             None,
             'Select universe',
-            'R:/NL/Database Marketing/R library/SQL builder/Poging 4/Universes',
+            './Universes',
             'Universes (*.uni)')[0])
         self.init_ui()
 
@@ -317,6 +317,7 @@ class CreateQueryInterface(QMainWindow, Query):
         confirm_button.linked_editor = where_editor
         confirm_button.parent_dialog = [dialog, source.parent_dialog]
         dialog.setWindowTitle('Specify where statement')
+
         dialog.resize(6 * len(where_editor.text()) + 240, 100)
         dialog.exec_()
 
