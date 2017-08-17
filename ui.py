@@ -321,6 +321,7 @@ class CreateQueryInterface(QMainWindow, Query):
         confirm_button.linked_editor = where_editor
         confirm_button.parent_dialog = [dialog, source.parent_dialog]
         dialog.setWindowTitle('Specify where statement')
+
         dialog.resize(6 * len(where_editor.text()) + 240, 100)
         dialog.exec_()
 
