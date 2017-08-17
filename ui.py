@@ -6,8 +6,8 @@ Created on Thu Aug 10 10:46:28 2017
 """
 
 import sys
-from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QFileDialog,
-                             QRadioButton, QPushButton, QCheckBox, QDialog, QTextEdit,
+from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QFileDialog, QDialog,
+                             QRadioButton, QPushButton, QCheckBox, QTextEdit,
                              QButtonGroup, QLineEdit, QApplication)
 from classes import Query
 
@@ -27,11 +27,14 @@ class CreateQueryInterface(QMainWindow, Query):
     """
 
     def __init__(self):
-        super().__init__(filename=QFileDialog.getOpenFileName(
-            None,
-            'Select universe',
-            './Universes',
-            'Universes (*.uni)')[0])
+        try:
+            super().__init__(filename=QFileDialog.getOpenFileName(
+                    None,
+                    'Select universe',
+                    'R:/NL/Database Marketing/R library/SQL builder/Universes',
+                    'Universes (*.uni)')[0])
+        except FileNotFoundError:
+            sys.exit()
         self.init_ui()
 
     def init_ui(self):
@@ -66,9 +69,10 @@ class CreateQueryInterface(QMainWindow, Query):
         self.compile_button.setEnabled(False)
         self.output = QTextEdit(self)
         self.output.move(200, 50)
-        self.output.resize(250, 400)
+        self.output.resize(400, 400)
         self.output.setReadOnly(True)
-        self.resize(500, 500)
+        self.resize(650, 500)
+        self.setWindowTitle('SQL Builder')
         self.center()
         self.raise_()
         self.activateWindow()
@@ -85,7 +89,7 @@ class CreateQueryInterface(QMainWindow, Query):
 
     def pick_tables(self):
         """
-        Creates a dialog where tables can be activated. self.activated_tables
+        Creates a dialog where tables can be activated. self.active_tables
         contains a list of tables already activated; the checked state is imported
         from there. If the table has been activated by a preset, its button will
         be disabled, to prevent messing with the preset.
@@ -109,7 +113,7 @@ class CreateQueryInterface(QMainWindow, Query):
     def activate_table(self, pressed):
         """
         When a checkbox created by pick_tables is changed, the related table is
-        added or removed from self.activated_tables. This also activates more
+        added or removed from self.active_tables. This also activates more
         relevant buttons in the main window.
         """
         source = self.sender()
@@ -366,7 +370,7 @@ class CreateQueryInterface(QMainWindow, Query):
         self.add_preset(source.text())
         self.column_button.setEnabled(True)
         self.compile_button.setEnabled(True)
-        if len(self.activated_tables) > 1:
+        if len(self.active_tables) > 1:
             self.join_button.setEnabled(True)
 
     def print_query(self):
