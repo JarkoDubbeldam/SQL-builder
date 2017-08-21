@@ -6,8 +6,8 @@
       "Priority": [1],
       "Columns": ["a", "b", "c"],
       "Joins": {
-        "table2": ["on table2.a = table1.a", "inner"],
-        "table3": ["on table1.c = table3.c", "inner"]
+        "table2": ["table2.a = table1.a", "inner"],
+        "table3": ["table1.c = table3.c", "inner"]
 
       }
     },
@@ -17,7 +17,7 @@
       "Priority": [2],
       "Columns": ["a", "d", "e"],
       "Joins": {
-        "table3": ["on table2.d=table3.d and table2.e = table3.e", "inner"]
+        "table3": ["table2.d=table3.d and table2.e = table3.e", "inner"]
       }
     },
     "table3": {
