@@ -21,6 +21,7 @@ class Universe:
         """
         with open(filename, encoding='utf-8') as file:
             json = loads(str(file.read()))
+
         self.presets = json['presets']
         self.tables = json['graph']
         self.connections = self.get_edges()
@@ -177,9 +178,7 @@ class Query(Universe):
         are needed and which tables need to be implicitly added. Returns a list
         of tuples with tablenames to be joined.
         """
-        tags = [self.tables[table]['tag'][0]
-                for table in self.active_tables]
-        join_paths = self.join_paths(tags)
+        join_paths = self.join_paths(self.active_tables)
         join_sets = [(table1, table2)
                      for join_edge in join_paths
                      for table1, table2 in zip(join_edge[:-1], join_edge[1:])]
@@ -202,7 +201,7 @@ class Query(Universe):
         added_table = table_tuple[1]
         try:
             on_string, how = self.tables[table_tuple[0]]['Joins'][table_tuple[1]]
-        except TypeError:
+        except (KeyError, TypeError) as _:
             table_tuple = (table_tuple[1], table_tuple[0])
             on_string, how = self.tables[table_tuple[0]]['Joins'][table_tuple[1]]
 
@@ -216,7 +215,7 @@ class Query(Universe):
                        + ' '
                        +  self.tables[added_table]['tag'][0]
                        + '\n')
-        return join_string + on_string
+        return join_string + 'on ' + on_string
 
     def generate_select_statement(self, table):
         """
